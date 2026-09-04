@@ -215,3 +215,4 @@ jobs:
           echo "Docker image:"
           echo "cr.yandex/${{ env.YC_REGISTRY_ID }}/class-site:${IMAGE_TAG}"
           echo "========================================"
+# Fix: credentials string layout
