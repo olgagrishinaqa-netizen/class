@@ -22,7 +22,7 @@ provider "yandex" {
   folder_id = "b1g7f31a1r5b3kl9b3f7"
 }
 
-# 1. Привязываем роль к существующему аккаунту (используем его прямой ID)
+# 1. Привязываем роль к существующему аккаунту
 resource "yandex_resourcemanager_folder_iam_member" "sa_registry_pull" {
   folder_id = "b1g7f31a1r5b3kl9b3f7"
   role      = "container-registry.images.puller"
@@ -34,15 +34,14 @@ resource "yandex_container_registry" "class_registry" {
   name = "class-site-registry"
 }
 
-# 3. Серверный контейнер с привязкой существующего аккаунта
+# 3. Серверный контейнер с уникальным продакшн-именем
 resource "yandex_serverless_container" "class_container" {
-  name               = "class-site-container"
+  name               = "class-site-container-prod"
   memory             = 256
   execution_timeout  = "15s"
   service_account_id = "ajemsqi8mffhfroos00r"
 
   image {
-    # ВНИМАНИЕ: подставляем новый ID созданного реестра, чтобы не было конфликтов
     url = "cr.yandex/${yandex_container_registry.class_registry.id}/class-site:${var.image_tag}"
     
     environment = {
