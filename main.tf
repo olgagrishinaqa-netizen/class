@@ -10,10 +10,9 @@ variable "yc_token" {
   type = string
 }
 
-# Добавляем переменную для динамического тега из GitHub
 variable "image_tag" {
   type    = string
-  default = "v1" # Дефолтное значение для локального запуска
+  default = "v1"
 }
 
 provider "yandex" {
@@ -45,11 +44,11 @@ resource "yandex_serverless_container" "class_container" {
   service_account_id = yandex_iam_service_account.sa.id
 
   image {
-    # Подставляем переменную тега прямо в URL образа
     url = "cr.yandex/${yandex_container_registry.class_registry.id}/class-site:${var.image_tag}"
     
-    env = {
-      "DB_HOST"     = "rc1a-smdv2b694hmvhlit.mdb.yandexcloud.net" # Сюда подставится ваш рабочий хост базы данных
+    # ПРАВИЛЬНЫЙ СИНТАКСИС ДЛЯ YANDEX TERRAFORM PROVIDER
+    environment = {
+      "DB_HOST"     = "rc1a-smdv2b694hmvhlit.mdb.yandexcloud.net"
       "DB_NAME"     = "class_db"
       "DB_USER"     = "db_admin"
       "DB_PASSWORD" = "SuperSecurePassword2026!"
