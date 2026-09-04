@@ -58,14 +58,14 @@ def index():
 def login():
     phone = request.form.get('phone')
     password = request.form.get('password')
-    
+
     conn = get_db_connection()
     cur = conn.cursor(cursor_factory=DictCursor)
     cur.execute("SELECT * FROM users WHERE phone = %s;", (phone,))
     user = cur.fetchone()
     cur.close()
     conn.close()
-    
+
     if user and check_password_hash(user['password'], password):
         session['user_id'] = user['id']
         session['role'] = user['role']
@@ -73,7 +73,7 @@ def login():
         if user['role'] == 'admin':
             return redirect(url_for('users_page'))
         return redirect(url_for('contacts'))
-    
+
     flash("Неверный номер телефона или пароль!", "danger")
     return redirect(url_for('index'))
 
@@ -87,7 +87,7 @@ def users_page():
 def get_users_api():
     if session.get('role') != 'admin':
         return jsonify({"error": "Unauthorized"}), 403
-        
+
     search_query = request.args.get('search', '').strip()
     page = request.args.get('page', 1, type=int)
     per_page = 5
@@ -99,13 +99,13 @@ def get_users_api():
     if search_query:
         sql_data = f"%{search_query}%"
         cur.execute("""
-            SELECT COUNT(*) FROM users 
+            SELECT COUNT(*) FROM users
             WHERE role = 'parent' AND (fio ILIKE %s OR phone ILIKE %s);
         """, (sql_data, sql_data))
         total_users = cur.fetchone()[0]
 
         cur.execute("""
-            SELECT id, fio, phone, child_fio FROM users 
+            SELECT id, fio, phone, child_fio FROM users
             WHERE role = 'parent' AND (fio ILIKE %s OR phone ILIKE %s)
             ORDER BY id DESC LIMIT %s OFFSET %s;
         """, (sql_data, sql_data, per_page, offset))
@@ -146,7 +146,7 @@ def create_user():
 
     conn = get_db_connection()
     cur = conn.cursor()
-    
+
     try:
         cur.execute("""
             INSERT INTO users (fio, phone, child_fio, password, role)
@@ -160,6 +160,12 @@ def create_user():
     finally:
         cur.close()
         conn.close()
+
+@app.route('/board')
+def board():
+    if not session.get('user_id'):
+        return redirect(url_for('index'))
+    return render_template('board.html')
 
 @app.route('/contacts')
 def contacts():
