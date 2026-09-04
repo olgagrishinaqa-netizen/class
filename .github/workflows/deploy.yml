@@ -42,13 +42,12 @@ jobs:
       id: vars
       run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
 
-    # Стабильное скачивание утилиты yc по ПОЛНОЙ правильной ссылке Яндекса
-    - name: Install Yandex Cloud CLI Binary
+    # Официальный автоматический скрипт Яндекса с флагом -a для работы без вопросов человека
+    - name: Install Yandex Cloud CLI via Official Script
       run: |
-        curl -sSL -O https://yandexcloud.net
-        chmod +x yc
-        sudo mv yc /usr/local/bin/yc
-
+        curl -sSL https://storage.yandexcloud.net/yandexcloud-yc/install.sh | bash -s -- -a
+        echo "/home/runner/yandex-cloud/bin" >> $GITHUB_PATH
+    
     # Авторизуемся через ваш секретный JSON-ключ сервисного аккаунта
     - name: Authenticate in Yandex Cloud
       id: yclogin
@@ -69,7 +68,7 @@ jobs:
       run: |
         yc container registry configure-docker --token=${{ steps.yclogin.outputs.iam_token }}
 
-    # НАЧАЛО БЛОКА DOCKER ИЗ ВАШЕГО ЗАДАНИЯ
+    # НАЧАЛО БЛОКА DOCKER ИЗ ВАШЕГО ЗАДАНИЯ ДИПЛОМА
     - name: Build Production Container Image
       run: |
         docker build -t cr.yandex/crp7cl7iq7aba09i8kd0/class-site:${{ steps.vars.outputs.sha_short }} .
@@ -78,7 +77,7 @@ jobs:
       run: |
         docker push cr.yandex/crp7cl7iq7aba09i8kd0/class-site:${{ steps.vars.outputs.sha_short }}
 
-    # НАЧАЛО БЛОКА TERRAFORM ИЗ ВАШЕГО ЗАДАНИЯ
+    # НАЧАЛО БЛОКА TERRAFORM ИЗ ВАШЕГО ЗАДАНИЯ ДИПЛОМА
     - name: Setup Terraform Environment
       uses: hashicorp/setup-terraform@v3
       with:
