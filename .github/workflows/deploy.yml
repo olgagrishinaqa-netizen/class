@@ -17,7 +17,7 @@ env:
   PYTHON_VERSION: "3.11"
   TERRAFORM_VERSION: "1.5.7"
 
-  # DevOps Best Practice: конфигурация отделена от кода и читается из GitHub Variables
+  # Конфигурация считывается из GitHub Variables
   YC_FOLDER_ID: ${{ vars.YC_FOLDER_ID }}
   YC_REGISTRY_ID: ${{ vars.YC_REGISTRY_ID }}
 
@@ -140,16 +140,13 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Configure Docker for Yandex Container Registry
+      # DevOps Best Practice: Нативная авторизация в приватном реестре без зависимости от хелперов путей
+      - name: Log in to Yandex Container Registry
         shell: bash
         env:
           IAM_TOKEN: ${{ steps.ycloud.outputs.iam_token }}
         run: |
-          set -euo pipefail
-          export PATH="/home/runner/yandex-cloud/bin:$PATH"
-
-          yc container registry configure-docker \
-            --token="$IAM_TOKEN"
+          echo "$IAM_TOKEN" | docker login --username iam --password-stdin cr.yandex
 
       # Нативная сборка Docker с кэшированием слоев
       - name: Build and push production Docker image
