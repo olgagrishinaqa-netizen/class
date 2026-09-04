@@ -146,9 +146,9 @@ jobs:
           IAM_TOKEN: ${{ steps.ycloud.outputs.iam_token }}
         run: |
           set -euo pipefail
+          export PATH="/home/runner/yandex-cloud/bin:$PATH"
 
-          /home/runner/yandex-cloud/bin/yc \
-            container registry configure-docker \
+          yc container registry configure-docker \
             --token="$IAM_TOKEN"
 
       # Нативная сборка Docker с кэшированием слоев
