@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Контакты и расписание</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <nav>
+        <a href="{{ url_for('board') }}">Канбан-доска</a>
+        <a href="{{ url_for('contacts') }}">Контакты и расписание</a>
+        <span class="badge {% if role == 'admin' %}admin-badge{% endif %}" style="color: white; margin-left: 10px;">Роль: {{ role }}</span>
+        <a href="{{ url_for('logout') }}" class="logout">Выйти</a>
+    </nav>
+    <div class="container">
+        <h2>Расписание школы</h2>
+        <p style="background: #e9ecef; padding: 15px; border-radius: 5px;">{{ schedule }}</p>
+        <h2 style="margin-top: 30px;">Родительский комитет</h2>
+        <ul>
+            {% for contact in contacts %}
+            <li><strong>{{ contact.role }}:</strong> {{ contact.name }} — <a href="tel:{{ contact.phone }}">{{ contact.phone }}</a></li>
+            {% endfor %}
+        </ul>
+    </div>
+</body>
+</html>

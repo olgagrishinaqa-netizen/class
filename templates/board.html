@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Доска задач класса</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <nav>
+        <a href="{{ url_for('board') }}">Канбан-доска</a>
+        <a href="{{ url_for('contacts') }}">Контакты и расписание</a>
+        <span class="badge {% if role == 'admin' %}admin-badge{% endif %}" style="color: white; margin-left: 10px;">Роль: {{ role }}</span>
+        <a href="{{ url_for('logout') }}" class="logout">Выйти</a>
+    </nav>
+    <div class="container">
+        <h2>Текущие задачи и объявления класса</h2>
+        {% if role == 'admin' %}
+        <div style="background: #f8f9fa; padding: 15px; border-radius: 6px; margin-bottom: 20px;">
+            <h4>Добавить новую задачу (Доступно админу):</h4>
+            <form method="POST" style="display: flex; gap: 10px;">
+                <input type="hidden" name="action" value="add">
+                <input type="text" name="task_text" placeholder="Текст задачи..." style="flex: 1; padding: 6px;" required>
+                <button type="submit" class="btn-main">Добавить</button>
+            </form>
+        </div>
+        {% endif %}
+        <div class="kanban">
+            <div class="column">
+                <h3>Надо сделать</h3>
+                {% for task in tasks if task.status == 'todo' %}
+                <div class="card">
+                    <p>{{ task.text }}</p>
+                    {% if role == 'admin' %}
+                    <div class="actions">
+                        <form method="POST" style="display:inline;">
+                            <input type="hidden" name="action" value="move">
+                            <input type="hidden" name="task_id" value="{{ task.id }}">
+                            <select name="status" onchange="this.form.submit()">
+                                <option value="todo" selected>Надо сделать</option>
+                                <option value="doing">В процессе</option>
+                                <option value="done">Готово</option>
+                            </select>
+                        </form>
+                        <form method="POST" style="display:inline;">
+                            <input type="hidden" name="action" value="delete">
+                            <input type="hidden" name="task_id" value="{{ task.id }}">
+                            <button type="submit" style="color: red;">❌</button>
+                        </form>
+                    </div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+            <div class="column">
+                <h3>В процессе</h3>
+                {% for task in tasks if task.status == 'doing' %}
+                <div class="card">
+                    <p>{{ task.text }}</p>
+                    {% if role == 'admin' %}
+                    <div class="actions">
+                        <form method="POST" style="display:inline;">
+                            <input type="hidden" name="action" value="move">
+                            <input type="hidden" name="task_id" value="{{ task.id }}">
+                            <select name="status" onchange="this.form.submit()">
+                                <option value="todo">Надо сделать</option>
+                                <option value="doing" selected>В процессе</option>
+                                <option value="done">Готово</option>
+                            </select>
+                        </form>
+                        <form method="POST" style="display:inline;">
+                            <input type="hidden" name="action" value="delete">
+                            <input type="hidden" name="task_id" value="{{ task.id }}">
+                            <button type="submit" style="color: red;">❌</button>
+                        </form>
+                    </div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+            <div class="column">
+                <h3>Выполнено</h3>
+                {% for task in tasks if task.status == 'done' %}
+                <div class="card" style="opacity: 0.7;">
+                    <p><s>{{ task.text }}</s></p>
+                    {% if role == 'admin' %}
+                    <div class="actions">
+                        <form method="POST" style="display:inline;">
+                            <input type="hidden" name="action" value="move">
+                            <input type="hidden" name="task_id" value="{{ task.id }}">
+                            <select name="status" onchange="this.form.submit()">
+                                <option value="todo">Надо сделать</option>
+                                <option value="doing">В процессе</option>
+                                <option value="done" selected>Готово</option>
+                            </select>
+                        </form>
+                        <form method="POST" style="display:inline;">
+                            <input type="hidden" name="action" value="delete">
+                            <input type="hidden" name="task_id" value="{{ task.id }}">
+                            <button type="submit" style="color: red;">❌</button>
+                        </form>
+                    </div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</body>
+</html>
