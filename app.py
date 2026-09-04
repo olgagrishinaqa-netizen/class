@@ -169,7 +169,9 @@ def board():
 
 @app.route('/contacts')
 def contacts():
-    return render_template('contacts.html')
+    if not session.get('user_id'):
+        return redirect(url_for('index'))
+    return render_template('contacts.html', role=session.get('role'))
 
 @app.route('/logout')
 def logout():
