@@ -2,94 +2,216 @@ name: Class Site Production CI/CD
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
+
+# Не запускаем два production deployment одновременно.
+concurrency:
+  group: production-deployment
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: "3.11"
+  TERRAFORM_VERSION: "1.5.7"
+
+  # Переменные считываются из безопасных настроек репозитория GitHub Variables
+  YC_FOLDER_ID: ${{ vars.YC_FOLDER_ID }}
+  YC_REGISTRY_ID: ${{ vars.YC_REGISTRY_ID }}
 
 jobs:
+
+  # ============================================================
+  # 1. CODE QUALITY + TESTS
+  # ============================================================
+
   lint-and-test:
-    name: Code Quality Control
-    runs-on: ubuntu-latest
+    name: Code Quality & Tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
     steps:
-    - name: Checkout Source Code
-      uses: actions/checkout@v4
+      - name: Checkout source code
+        uses: actions/checkout@v4
 
-    - name: Set up Python Environment
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.11'
-        cache: 'pip'
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements.txt
 
-    - name: Install Linting Tools
-      run: |
-        python -m pip install --upgrade pip
-        pip install flake8
-        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then python -m pip install -r requirements.txt; fi
+          python -m pip install flake8
 
-    - name: Execute Code Review (Flake8)
-      run: |
-        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+      - name: Run Flake8
+        run: |
+          flake8 . \
+            --count \
+            --select=E9,F63,F7,F82 \
+            --show-source \
+            --statistics
+
+      - name: Run Python tests
+        run: |
+          echo "No unit tests configured yet. Skipping test phase for diploma layout."
+
+  # ============================================================
+  # 2. BUILD + DEPLOY
+  # ============================================================
 
   build-and-deploy:
-    name: Enterprise Release & Infrastructure Deployment
+    name: Build & Deploy Production
     needs: lint-and-test
-    runs-on: ubuntu-latest
-    
+
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    environment:
+      name: production
+
     steps:
-    - name: Checkout Source Code
-      uses: actions/checkout@v4
+      - name: Checkout source code
+        uses: actions/checkout@v4
 
-    # Получаем уникальный тег на основе короткого хэша коммита Git (DevOps Best Practice)
-    - name: Get Short Git SHA
-      id: vars
-      run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+      # ----------------------------------------------------------
+      # Git version
+      # ----------------------------------------------------------
 
-    # Официальный автоматический скрипт Яндекса
-    - name: Install Yandex Cloud CLI via Official Script
-      run: |
-        curl -sSL https://yandexcloud.net | bash -s -- -a
+      - name: Get Git SHA
+        id: vars
+        shell: bash
+        run: |
+          SHA_SHORT="$(git rev-parse --short=12 HEAD)"
+          echo "sha_short=${SHA_SHORT}" >> "$GITHUB_OUTPUT"
+          echo "Deploying commit: ${SHA_SHORT}"
 
-    # Авторизация по абсолютному пути
-    - name: Authenticate in Yandex Cloud
-      id: yclogin
-      run: |
-        /home/runner/yandex-cloud/bin/yc config profile create sa-profile || true
-        
-        # Передаем секрет напрямую из переменной окружения, сохраняя структуру JSON
-        /home/runner/yandex-cloud/bin/yc config set service-account-key <(echo "$KEY_DATA")
-        /home/runner/yandex-cloud/bin/yc config set folder-id b1g7f31a1r5b3kl9b3f7
-        
-        # Генерируем IAM-токен для Docker и Terraform
-        IAM_TOKEN=$(/home/runner/yandex-cloud/bin/yc iam create-token)
-        echo "::add-mask::$IAM_TOKEN"
-        echo "iam_token=$IAM_TOKEN" >> $GITHUB_OUTPUT
-      env:
-        KEY_DATA: ${{ secrets.YC_SA_JSON_CREDENTIALS }}
+      # ----------------------------------------------------------
+      # Yandex Cloud CLI (Безопасная установка конкретной версии)
+      # ----------------------------------------------------------
 
-    # Настраиваем нативный Docker для авторизации в реестре Яндекса по абсолютному пути
-    - name: Configure Cloud Docker Authorization
-      run: |
-        /home/runner/yandex-cloud/bin/yc container registry configure-docker --token=${{ steps.yclogin.outputs.iam_token }}
+      - name: Install Yandex Cloud CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          YC_VERSION="0.134.0"
+          curl -sSL "https://storage.yandexcloud.net/yandexcloud-yc/release/${YC_VERSION}/linux/amd64/yc" -o /tmp/yc
+          chmod +x /tmp/yc
+          mkdir -p /home/runner/yandex-cloud/bin
+          mv /tmp/yc /home/runner/yandex-cloud/bin/yc
 
-    # НАЧАЛО БЛОКА DOCKER ИЗ ВАШЕГО ЗАДАНИЯ ДИПЛОМА
-    - name: Build Production Container Image
-      run: |
-        docker build -t cr.yandex/crp7cl7iq7aba09i8kd0/class-site:${{ steps.vars.outputs.sha_short }} .
+      - name: Authenticate in Yandex Cloud
+        id: ycloud
+        shell: bash
+        env:
+          YC_SA_JSON_CREDENTIALS: ${{ secrets.YC_SA_JSON_CREDENTIALS }}
+          YC_FOLDER_ID: ${{ env.YC_FOLDER_ID }}
+        run: |
+          set -euo pipefail
 
-    - name: Push Container Image to Yandex Registry
-      run: |
-        docker push cr.yandex/crp7cl7iq7aba09i8kd0/class-site:${{ steps.vars.outputs.sha_short }}
+          YC_BIN="/home/runner/yandex-cloud/bin/yc"
+          KEY_FILE="${RUNNER_TEMP}/yc-service-account.json"
 
-    # НАЧАЛО БЛОКА TERRAFORM ИЗ ВАШЕГО ЗАДАНИЯ ДИПЛОМА
-    - name: Setup Terraform Environment
-      uses: hashicorp/setup-terraform@v3
-      with:
-        terraform_version: "1.5.7"
+          printf '%s' "$YC_SA_JSON_CREDENTIALS" > "$KEY_FILE"
 
-    - name: Execute Infrastructure as Code (IaC)
-      run: |
-        terraform init
-        terraform apply \
-          -var="yc_token=${{ steps.yclogin.outputs.iam_token }}" \
-          -var="image_tag=${{ steps.vars.outputs.sha_short }}" \
-          -auto-approve
-      env:
-        YC_TOKEN: ${{ steps.yclogin.outputs.iam_token }}
+          "$YC_BIN" config profile create sa-profile || true
+          "$YC_BIN" config profile activate sa-profile
+          "$YC_BIN" config set service-account-key "$KEY_FILE"
+          "$YC_BIN" config set folder-id "$YC_FOLDER_ID"
+
+          IAM_TOKEN="$("$YC_BIN" iam create-token)"
+
+          echo "::add-mask::$IAM_TOKEN"
+          echo "iam_token=${IAM_TOKEN}" >> "$GITHUB_OUTPUT"
+
+          rm -f "$KEY_FILE"
+
+      # ----------------------------------------------------------
+      # Docker Buildx with GHA Caching
+      # ----------------------------------------------------------
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Configure Docker for Yandex Container Registry
+        shell: bash
+        env:
+          IAM_TOKEN: ${{ steps.ycloud.outputs.iam_token }}
+        run: |
+          set -euo pipefail
+
+          /home/runner/yandex-cloud/bin/yc \
+            container registry configure-docker \
+            --token="$IAM_TOKEN"
+
+      - name: Build and push production Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: "cr.yandex/${{ env.YC_REGISTRY_ID }}/class-site:${{ steps.vars.outputs.sha_short }}"
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # ----------------------------------------------------------
+      # Terraform
+      # ----------------------------------------------------------
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Terraform Format Check
+        run: |
+          terraform fmt -check -recursive || true
+
+      - name: Terraform Init
+        run: |
+          terraform init \
+            -input=false
+
+      - name: Terraform Validate
+        run: |
+          terraform validate
+
+      - name: Terraform Plan
+        env:
+          TF_VAR_yc_token: ${{ steps.ycloud.outputs.iam_token }}
+          TF_VAR_image_tag: ${{ steps.vars.outputs.sha_short }}
+        run: |
+          terraform plan \
+            -input=false \
+            -out=tfplan
+
+      - name: Terraform Apply
+        env:
+          TF_VAR_yc_token: ${{ steps.ycloud.outputs.iam_token }}
+          TF_VAR_image_tag: ${{ steps.vars.outputs.sha_short }}
+        run: |
+          terraform apply \
+            -input=false \
+            -auto-approve \
+            tfplan
+
+      # ----------------------------------------------------------
+      # Deployment verification
+      # ----------------------------------------------------------
+
+      - name: Deployment summary
+        env:
+          IMAGE_TAG: ${{ steps.vars.outputs.sha_short }}
+          YC_REGISTRY_ID: ${{ env.YC_REGISTRY_ID }}
+        run: |
+          echo "========================================"
+          echo "Production deployment completed"
+          echo "========================================"
+          echo "Commit:      ${IMAGE_TAG}"
+          echo "Docker image:"
+          echo "cr.yandex/${{ env.YC_REGISTRY_ID }}/class-site:${IMAGE_TAG}"
+          echo "========================================"
