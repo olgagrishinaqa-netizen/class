@@ -18,9 +18,9 @@ env:
 
   YC_FOLDER_ID: ${{ vars.YC_FOLDER_ID }}
   YC_REGISTRY_ID: ${{ vars.YC_REGISTRY_ID }}
+  YC_SERVICE_ACCOUNT_ID: ${{ vars.YC_SERVICE_ACCOUNT_ID }}
 
 jobs:
-
   lint-and-test:
     name: Code Quality & Tests
     runs-on: ubuntu-24.04
@@ -43,22 +43,17 @@ jobs:
           if [ -f requirements.txt ]; then python -m pip install -r requirements.txt; fi
           python -m pip install flake8
 
-      - name: Run Flake8 (Автоматическое код-ревью)
+      - name: Run Flake8
         run: |
-          flake8 . \
-            --count \
-            --select=E9,F63,F7,F82 \
-            --show-source \
-            --statistics
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
 
       - name: Run Python tests
         run: |
-          echo "No unit tests configured yet. Skipping test phase for diploma layout."
+          echo "Skipping test phase."
 
   build-and-deploy:
     name: Build & Deploy Production
     needs: lint-and-test
-
     runs-on: ubuntu-24.04
     timeout-minutes: 30
 
@@ -95,10 +90,8 @@ jobs:
           YC_FOLDER_ID: ${{ env.YC_FOLDER_ID }}
         run: |
           set -euo pipefail
-
           YC_BIN="/home/runner/yandex-cloud/bin/yc"
           KEY_FILE="${RUNNER_TEMP}/yc-service-account.json"
-
           printf '%s' "$YC_SA_JSON_CREDENTIALS" > "$KEY_FILE"
 
           "$YC_BIN" config profile create sa-profile || true
@@ -107,10 +100,8 @@ jobs:
           "$YC_BIN" config set folder-id "$YC_FOLDER_ID"
 
           IAM_TOKEN="$("$YC_BIN" iam create-token)"
-
           echo "::add-mask::$IAM_TOKEN"
           echo "iam_token=${IAM_TOKEN}" >> "$GITHUB_OUTPUT"
-
           rm -f "$KEY_FILE"
 
       - name: Set up Docker Buildx
@@ -138,14 +129,9 @@ jobs:
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
 
-      - name: Terraform Format Check
-        run: |
-          terraform fmt -check -recursive || true
-
       - name: Terraform Init
         run: |
-          terraform init \
-            -input=false
+          terraform init -input=false
 
       - name: Terraform Validate
         run: |
@@ -156,6 +142,8 @@ jobs:
           TF_VAR_yc_token: ${{ steps.ycloud.outputs.iam_token }}
           TF_VAR_image_tag: ${{ steps.vars.outputs.sha_short }}
           TF_VAR_registry_id: ${{ env.YC_REGISTRY_ID }}
+          TF_VAR_service_account_id: ${{ env.YC_SERVICE_ACCOUNT_ID }}
+          TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
         run: |
           terraform plan -input=false
 
@@ -164,10 +152,10 @@ jobs:
           TF_VAR_yc_token: ${{ steps.ycloud.outputs.iam_token }}
           TF_VAR_image_tag: ${{ steps.vars.outputs.sha_short }}
           TF_VAR_registry_id: ${{ env.YC_REGISTRY_ID }}
+          TF_VAR_service_account_id: ${{ env.YC_SERVICE_ACCOUNT_ID }}
+          TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
         run: |
-          terraform apply \
-            -input=false \
-            -auto-approve
+          terraform apply -input=false -auto-approve
 
       - name: Deployment summary
         env:
@@ -175,7 +163,7 @@ jobs:
           YC_REGISTRY_ID: ${{ env.YC_REGISTRY_ID }}
         run: |
           echo "========================================"
-          echo "Production deployment completed"
+          echo "Production deployment completed successfully!"
           echo "========================================"
           echo "Commit:      ${IMAGE_TAG}"
           echo "Docker image:"
