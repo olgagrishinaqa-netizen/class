@@ -36,26 +36,41 @@ jobs:
     - name: Checkout Source Code
       uses: actions/checkout@v4
 
-    # Получаем короткий хэш коммита для уникального тега (например, d3b4c1a)
+    # Получаем короткий хэш коммита для уникального тега
     - name: Get Short Git SHA
       id: vars
       run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
 
+    # Лучшая практика: Прямая гарантированная установка CLI в системный PATH
+    - name: Install Yandex Cloud CLI Binary
+      run: |
+        wget -q https://yandexcloud.net
+        chmod +x yc
+        sudo mv yc /usr/local/bin/yc
+
+    # Авторизуемся через ваш секретный JSON-ключ сервисного аккаунта
     - name: Authenticate in Yandex Cloud
-      id: yc-auth
-      uses: yandex-cloud/yc-actions-setup@v1
-      with:
-        max-retries: 3
-        yc-sa-json-credentials: ${{ secrets.YC_SA_JSON_CREDENTIALS }}
+      id: yclogin
+      run: |
+        echo '${{ secrets.YC_SA_JSON_CREDENTIALS }}' > sa_key.json
+        yc config profile create sa-profile || true
+        yc config set service-account-key sa_key.json
+        yc config set folder-id b1g7f31a1r5b3kl9b3f7
+        
+        # Генерируем IAM-токен
+        IAM_TOKEN=$(yc iam create-token)
+        echo "::add-mask::$IAM_TOKEN"
+        echo "iam_token=$IAM_TOKEN" >> $GITHUB_OUTPUT
+        rm sa_key.json
 
     - name: Configure Cloud Docker Authorization
       run: |
-        yc container registry configure-docker --token=${{ steps.yc-auth.outputs.yc-iam-token }}
+        yc container registry configure-docker --token=${{ steps.yclogin.outputs.iam_token }}
 
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
 
-    # Собираем образ с УНИКАЛЬНЫМ тегом на основе хэша коммита
+    # Собираем образ с УНИКАЛЬНЫМ тегом коммита и кэшированием слоев
     - name: Build and Push Production Container
       uses: docker/build-push-action@v5
       with:
@@ -70,13 +85,13 @@ jobs:
       with:
         terraform_version: "1.5.7"
 
-    # Передаем уникальный тег в Terraform как переменную, чтобы он обновил контейнер в облаке
+    # Запускаем деплой инфраструктуры
     - name: Execute Infrastructure as Code (IaC)
       run: |
         terraform init
         terraform apply \
-          -var="yc_token=${{ steps.yc-auth.outputs.yc-iam-token }}" \
+          -var="yc_token=${{ steps.yclogin.outputs.iam_token }}" \
           -var="image_tag=${{ steps.vars.outputs.sha_short }}" \
           -auto-approve
       env:
-        YC_TOKEN: ${{ steps.yc-auth.outputs.yc-iam-token }}
+        YC_TOKEN: ${{ steps.yclogin.outputs.iam_token }}
