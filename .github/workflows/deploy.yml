@@ -173,7 +173,10 @@ jobs:
       - name: Send Telegram Notification
         uses: appleboy/telegram-action@master
         continue-on-error: true
-        if: always() && secrets.TELEGRAM_TOKEN != '' && secrets.TELEGRAM_TO != ''
+        if: always() && env.TG_TOKEN != '' && env.TG_TO != ''
+        env:
+          TG_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TG_TO: ${{ secrets.TELEGRAM_TO }}
         with:
           to: ${{ secrets.TELEGRAM_TO }}
           token: ${{ secrets.TELEGRAM_TOKEN }}
