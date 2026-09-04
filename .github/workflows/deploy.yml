@@ -37,12 +37,12 @@ jobs:
     - name: Checkout Source Code
       uses: actions/checkout@v4
 
-    # Получаем короткий хэш коммита для уникального тега (DevOps Best Practice)
+    # Получаем уникальный тег на основе короткого хэша коммита Git (DevOps Best Practice)
     - name: Get Short Git SHA
       id: vars
       run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
 
-    # Стабильная и чистая установка бинарного файла yc напрямую через curl
+    # Стабильное скачивание утилиты yc по ПОЛНОЙ правильной ссылке Яндекса
     - name: Install Yandex Cloud CLI Binary
       run: |
         curl -sSL -O https://yandexcloud.net
@@ -50,7 +50,7 @@ jobs:
         sudo mv yc /usr/local/bin/yc
 
     # Авторизуемся через ваш секретный JSON-ключ сервисного аккаунта
-    - name: Authenticate and Get IAM Token
+    - name: Authenticate in Yandex Cloud
       id: yclogin
       run: |
         echo '${{ secrets.YC_SA_JSON_CREDENTIALS }}' > sa_key.json
@@ -58,36 +58,32 @@ jobs:
         yc config set service-account-key sa_key.json
         yc config set folder-id b1g7f31a1r5b3kl9b3f7
         
-        # Генерируем IAM-токен
+        # Генерируем IAM-токен для Docker и Terraform
         IAM_TOKEN=$(yc iam create-token)
         echo "::add-mask::$IAM_TOKEN"
         echo "iam_token=$IAM_TOKEN" >> $GITHUB_OUTPUT
         rm sa_key.json
 
-    # Логинимся в реестр через полученный токен
-    - name: Log in to Yandex Container Registry
+    # Настраиваем нативный Docker для авторизации в реестре Яндекса
+    - name: Configure Cloud Docker Authorization
       run: |
-        echo "${{ steps.yclogin.outputs.iam_token }}" | docker login --username iam --password-stdin cr.yandex
+        yc container registry configure-docker --token=${{ steps.yclogin.outputs.iam_token }}
 
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
+    # НАЧАЛО БЛОКА DOCKER ИЗ ВАШЕГО ЗАДАНИЯ
+    - name: Build Production Container Image
+      run: |
+        docker build -t cr.yandex/crp7cl7iq7aba09i8kd0/class-site:${{ steps.vars.outputs.sha_short }} .
 
-    # Сборка и пуш с уникальным тегом коммита (Immutable Tags)
-    - name: Build and Push Production Container
-      uses: docker/build-push-action@v5
-      with:
-        context: .
-        push: true
-        tags: cr.yandex/crp7cl7iq7aba09i8kd0/class-site:${{ steps.vars.outputs.sha_short }}
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
+    - name: Push Container Image to Yandex Registry
+      run: |
+        docker push cr.yandex/crp7cl7iq7aba09i8kd0/class-site:${{ steps.vars.outputs.sha_short }}
 
+    # НАЧАЛО БЛОКА TERRAFORM ИЗ ВАШЕГО ЗАДАНИЯ
     - name: Setup Terraform Environment
       uses: hashicorp/setup-terraform@v3
       with:
         terraform_version: "1.5.7"
 
-    # Применяем изменения инфраструктуры через Terraform
     - name: Execute Infrastructure as Code (IaC)
       run: |
         terraform init
