@@ -7,7 +7,8 @@ terraform {
 }
 
 variable "yc_token" {
-  type = string
+  type      = string
+  sensitive = true
 }
 
 variable "image_tag" {
@@ -26,8 +27,14 @@ variable "db_password" {
 
 variable "network_id" {
   type        = string
-  description = "ID VPC-сети, в которой расположена PostgreSQL"
-  default     = "" # Укажите ID вашей VPC сети (например: "enp...")
+  description = "ID VPC-сети для подключения к Managed PostgreSQL"
+  default     = ""
+}
+
+variable "subnet_id" {
+  type        = string
+  description = "ID подсети для контейнера"
+  default     = ""
 }
 
 provider "yandex" {
@@ -54,11 +61,11 @@ resource "yandex_serverless_container" "class_container" {
   execution_timeout  = "60s"
   service_account_id = var.service_account_id
 
-  # Привязка контейнера к VPC для взаимодействия с PostgreSQL и DNS
+  # Профессиональная привязка к сети VPC и подсети для доступа к БД
   dynamic "connectivity" {
-    for_each = var.network_id != "" ? [var.network_id] : []
+    for_each = var.network_id != "" ? [1] : []
     content {
-      network_id = connectivity.value
+      network_id = var.network_id
     }
   }
 
@@ -71,6 +78,10 @@ resource "yandex_serverless_container" "class_container" {
       "DB_USER"     = "db_admin"
       "DB_PASSWORD" = var.db_password
     }
+  }
+
+  lifecycle {
+    create_before_destroy = true
   }
 }
 
