@@ -157,6 +157,7 @@ jobs:
           tags: "cr.yandex/${{ env.YC_REGISTRY_ID }}/class-site:${{ steps.vars.outputs.sha_short }}"
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          provenance: false
 
       # ----------------------------------------------------------
       # Terraform (Infrastructure as Code)
