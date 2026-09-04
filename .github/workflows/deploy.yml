@@ -1,4 +1,4 @@
-name: Class Site CI/CD Pipeline
+name: Class Site Production CI/CD
 
 on:
   push:
@@ -6,70 +6,77 @@ on:
 
 jobs:
   lint-and-test:
+    name: Code Quality Control
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
+    - name: Checkout Source Code
+      uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
+    - name: Set up Python Environment
+      uses: actions/setup-python@v5
       with:
         python-version: '3.11'
+        cache: 'pip'
 
-    - name: Install dependencies
+    - name: Install Linting Tools
       run: |
         python -m pip install --upgrade pip
         pip install flake8
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
-    - name: Lint with flake8
+    - name: Execute Code Review (Flake8)
       run: |
         flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
 
   build-and-deploy:
+    name: Enterprise Release & Infrastructure Deployment
     needs: lint-and-test
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
+    - name: Checkout Source Code
+      uses: actions/checkout@v4
 
-    # Стабильная установка утилиты yc в дефолтную папку пользователя runner
-    - name: Install Yandex Cloud CLI
-      run: |
-        curl -sSL https://yandexcloud.net | bash
-        # Добавляем путь к yc в системный PATH гитхаба для следующих шагов
-        echo "/home/runner/yandex-cloud/bin" >> $GITHUB_PATH
+    # Получаем короткий хэш коммита для уникального тега (например, d3b4c1a)
+    - name: Get Short Git SHA
+      id: vars
+      run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
 
-    # Авторизуемся, используя явный полный путь к установленной утилите yc
     - name: Authenticate in Yandex Cloud
-      id: yclogin
+      id: yc-auth
+      uses: yandex-cloud/yc-actions-setup@v1
+      with:
+        max-retries: 3
+        yc-sa-json-credentials: ${{ secrets.YC_SA_JSON_CREDENTIALS }}
+
+    - name: Configure Cloud Docker Authorization
       run: |
-        echo '${{ secrets.YC_SA_JSON_CREDENTIALS }}' > sa_key.json
-        /home/runner/yandex-cloud/bin/yc config profile create sa-profile || true
-        /home/runner/yandex-cloud/bin/yc config set service-account-key sa_key.json
-        /home/runner/yandex-cloud/bin/yc config set folder-id b1g7f31a1r5b3kl9b3f7
-        
-        # Генерируем IAM-токен
-        IAM_TOKEN=$(/home/runner/yandex-cloud/bin/yc iam create-token)
-        echo "::add-mask::$IAM_TOKEN"
-        echo "iam_token=$IAM_TOKEN" >> $GITHUB_OUTPUT
-        rm sa_key.json
+        yc container registry configure-docker --token=${{ steps.yc-auth.outputs.yc-iam-token }}
 
-    - name: Configure Docker for Yandex Registry
-      run: |
-        /home/runner/yandex-cloud/bin/yc container registry configure-docker --token=${{ steps.yclogin.outputs.iam_token }}
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
 
-    - name: Build and Push Docker Image
-      run: |
-        docker build -t cr.yandex/crp7cl7iq7aba09i8kd0/class-site:v1 .
-        docker push cr.yandex/crp7cl7iq7aba09i8kd0/class-site:v1
+    # Собираем образ с УНИКАЛЬНЫМ тегом на основе хэша коммита
+    - name: Build and Push Production Container
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        push: true
+        tags: cr.yandex/crp7cl7iq7aba09i8kd0/class-site:${{ steps.vars.outputs.sha_short }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
 
-    - name: Setup Terraform
-      uses: hashicorp/setup-terraform@v2
+    - name: Setup Terraform Environment
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: "1.5.7"
 
-    - name: Terraform Init and Apply
+    # Передаем уникальный тег в Terraform как переменную, чтобы он обновил контейнер в облаке
+    - name: Execute Infrastructure as Code (IaC)
       run: |
         terraform init
-        terraform apply -var="yc_token=${{ steps.yclogin.outputs.iam_token }}" -replace="yandex_serverless_container.class_container" -auto-approve
+        terraform apply \
+          -var="yc_token=${{ steps.yc-auth.outputs.yc-iam-token }}" \
+          -var="image_tag=${{ steps.vars.outputs.sha_short }}" \
+          -auto-approve
       env:
-        YC_TOKEN: ${{ steps.yclogin.outputs.iam_token }}
+        YC_TOKEN: ${{ steps.yc-auth.outputs.yc-iam-token }}
