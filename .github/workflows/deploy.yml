@@ -42,24 +42,27 @@ jobs:
       id: vars
       run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
 
-    # Используем официальный контейнер Яндекса для выполнения облачных команд
+    # Стабильная и чистая установка бинарного файла yc напрямую через curl
+    - name: Install Yandex Cloud CLI Binary
+      run: |
+        curl -sSL -O https://yandexcloud.net
+        chmod +x yc
+        sudo mv yc /usr/local/bin/yc
+
+    # Авторизуемся через ваш секретный JSON-ключ сервисного аккаунта
     - name: Authenticate and Get IAM Token
       id: yclogin
       run: |
         echo '${{ secrets.YC_SA_JSON_CREDENTIALS }}' > sa_key.json
+        yc config profile create sa-profile || true
+        yc config set service-account-key sa_key.json
+        yc config set folder-id b1g7f31a1r5b3kl9b3f7
         
-        # Запускаем команду yc внутри официального Docker-образа Яндекса
-        docker run --rm -v $(pwd):/apps -w /apps cr.yandex/yc/yc:latest sh -c "
-          yc config profile create sa-profile || true
-          yc config set service-account-key sa_key.json
-          yc config set folder-id b1g7f31a1r5b3kl9b3f7
-          yc iam create-token
-        " > token.txt
-        
-        IAM_TOKEN=$(cat token.txt | tr -d '\r\n ')
+        # Генерируем IAM-токен
+        IAM_TOKEN=$(yc iam create-token)
         echo "::add-mask::$IAM_TOKEN"
         echo "iam_token=$IAM_TOKEN" >> $GITHUB_OUTPUT
-        rm sa_key.json token.txt
+        rm sa_key.json
 
     # Логинимся в реестр через полученный токен
     - name: Log in to Yandex Container Registry
@@ -84,7 +87,7 @@ jobs:
       with:
         terraform_version: "1.5.7"
 
-    # Применяем изменения инфраструктуры
+    # Применяем изменения инфраструктуры через Terraform
     - name: Execute Infrastructure as Code (IaC)
       run: |
         terraform init
