@@ -5,7 +5,6 @@ on:
     branches:
       - main
 
-# Защита: не запускаем два production deployment одновременно.
 concurrency:
   group: production-deployment
   cancel-in-progress: false
@@ -17,15 +16,10 @@ env:
   PYTHON_VERSION: "3.11"
   TERRAFORM_VERSION: "1.5.7"
 
-  # Конфигурация считывается из GitHub Variables
   YC_FOLDER_ID: ${{ vars.YC_FOLDER_ID }}
   YC_REGISTRY_ID: ${{ vars.YC_REGISTRY_ID }}
 
 jobs:
-
-  # ============================================================
-  # 1. CODE QUALITY + TESTS
-  # ============================================================
 
   lint-and-test:
     name: Code Quality & Tests
@@ -61,10 +55,6 @@ jobs:
         run: |
           echo "No unit tests configured yet. Skipping test phase for diploma layout."
 
-  # ============================================================
-  # 2. BUILD + DEPLOY
-  # ============================================================
-
   build-and-deploy:
     name: Build & Deploy Production
     needs: lint-and-test
@@ -79,10 +69,6 @@ jobs:
       - name: Checkout source code
         uses: actions/checkout@v4
 
-      # ----------------------------------------------------------
-      # Git versioning
-      # ----------------------------------------------------------
-
       - name: Get Git SHA
         id: vars
         shell: bash
@@ -90,10 +76,6 @@ jobs:
           SHA_SHORT="$(git rev-parse --short=12 HEAD)"
           echo "sha_short=${SHA_SHORT}" >> "$GITHUB_OUTPUT"
           echo "Deploying commit: ${SHA_SHORT}"
-
-      # ----------------------------------------------------------
-      # Yandex Cloud CLI (Фиксированная стабильная версия утилиты)
-      # ----------------------------------------------------------
 
       - name: Install Yandex Cloud CLI
         shell: bash
@@ -117,9 +99,7 @@ jobs:
           YC_BIN="/home/runner/yandex-cloud/bin/yc"
           KEY_FILE="${RUNNER_TEMP}/yc-service-account.json"
 
-          cat << 'EOF' > "$KEY_FILE"
-          ${{ secrets.YC_SA_JSON_CREDENTIALS }}
-          EOF
+          printf '%s' "$YC_SA_JSON_CREDENTIALS" > "$KEY_FILE"
 
           "$YC_BIN" config profile create sa-profile || true
           "$YC_BIN" config profile activate sa-profile
@@ -133,14 +113,9 @@ jobs:
 
           rm -f "$KEY_FILE"
 
-      # ----------------------------------------------------------
-      # Docker Buildx with GHA Layer Caching
-      # ----------------------------------------------------------
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # DevOps Best Practice: Нативная авторизация в приватном реестре без зависимости от хелперов путей
       - name: Log in to Yandex Container Registry
         shell: bash
         env:
@@ -148,7 +123,6 @@ jobs:
         run: |
           echo "$IAM_TOKEN" | docker login --username iam --password-stdin cr.yandex
 
-      # Нативная сборка Docker с кэшированием слоев
       - name: Build and push production Docker image
         uses: docker/build-push-action@v5
         with:
@@ -158,10 +132,6 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           provenance: false
-
-      # ----------------------------------------------------------
-      # Terraform (Infrastructure as Code)
-      # ----------------------------------------------------------
 
       - name: Set up Terraform
         uses: hashicorp/setup-terraform@v3
@@ -185,24 +155,19 @@ jobs:
         env:
           TF_VAR_yc_token: ${{ steps.ycloud.outputs.iam_token }}
           TF_VAR_image_tag: ${{ steps.vars.outputs.sha_short }}
+          TF_VAR_registry_id: ${{ env.YC_REGISTRY_ID }}
         run: |
-          terraform plan \
-            -input=false \
-            -out=tfplan
+          terraform plan -input=false
 
       - name: Terraform Apply
         env:
           TF_VAR_yc_token: ${{ steps.ycloud.outputs.iam_token }}
           TF_VAR_image_tag: ${{ steps.vars.outputs.sha_short }}
+          TF_VAR_registry_id: ${{ env.YC_REGISTRY_ID }}
         run: |
           terraform apply \
             -input=false \
-            -auto-approve \
-            tfplan
-
-      # ----------------------------------------------------------
-      # Deployment verification
-      # ----------------------------------------------------------
+            -auto-approve
 
       - name: Deployment summary
         env:
