@@ -76,3 +76,7 @@ output "container_registry_id" {
 output "website_url" {
   value = yandex_serverless_container.class_container.url
 }
+import {
+  to = yandex_serverless_container.class_container
+  id = "bbaem4tq80vjo2ig9tvq"
+}
