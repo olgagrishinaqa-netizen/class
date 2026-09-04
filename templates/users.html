@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="ru" class="h-full bg-slate-900 text-slate-100">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Панель управления пользователями</title>
+    <script src="https://tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body class="h-full flex flex-col font-sans antialiased selection:bg-indigo-500 selection:text-white">
+
+    <!-- Современный Navbar -->
+    <nav class="border-b border-slate-800 bg-slate-900/50 backdrop-blur sticky top-0 z-40">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <div class="flex items-center gap-3">
+                    <div class="p-2 bg-indigo-600/20 text-indigo-400 rounded-xl">
+                        <i data-lucide="shield-check" class="w-6 h-6"></i>
+                    </div>
+                    <span class="text-lg font-bold tracking-tight text-white">Classroom <span class="text-indigo-400">Admin</span></span>
+                </div>
+                <div class="flex items-center gap-4">
+                    <span class="text-sm text-slate-400 flex items-center gap-2">
+                        <i data-lucide="user" class="w-4 h-4 text-slate-500"></i> {{ session.fio }}
+                    </span>
+                    <a href="/logout" class="flex items-center gap-2 text-sm font-medium text-slate-400 hover:text-white transition bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded-lg">
+                        <i data-lucide="log-out" class="w-4 h-4"></i> Выйти
+                    </a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Основной контент -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        
+        <!-- Динамический блок уведомлений -->
+        <div id="toast-container" class="fixed top-20 right-4 z-50 flex flex-col gap-3"></div>
+
+        <!-- Контрольная панель -->
+        <div class="mb-6 flex flex-col sm:flex-row gap-4 items-center justify-between bg-slate-800/40 p-4 border border-slate-800 rounded-2xl backdrop-blur-sm">
+            <div class="relative w-full sm:max-w-md">
+                <span class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-500">
+                    <i data-lucide="search" class="w-5 h-5"></i>
+                </span>
+                <input type="text" id="search-input" class="w-full pl-10 pr-4 py-2 bg-slate-900 border border-slate-700 rounded-xl text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-slate-100 placeholder-slate-500 transition" placeholder="Поиск по ФИО или номеру телефона...">
+            </div>
+            <button onclick="openModal()" class="w-full sm:w-auto flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white font-medium text-sm px-4 py-2.5 rounded-xl shadow-lg shadow-indigo-600/20 transition">
+                <i data-lucide="user-plus" class="w-4 h-4"></i> Создать пользователя
+            </button>
+        </div>
+
+        <!-- Интерактивная таблица -->
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl">
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="border-b border-slate-800 bg-slate-800/20 text-xs font-semibold uppercase tracking-wider text-slate-400">
+                            <th class="px-6 py-4">ID</th>
+                            <th class="px-6 py-4">ФИО Родителя</th>
+                            <th class="px-6 py-4">Телефон</th>
+                            <th class="px-6 py-4">ФИО Ребенка</th>
+                            <th class="px-6 py-4">Статус безопасности</th>
+                        </tr>
+                    </thead>
+                    <tbody id="users-table-body" class="divide-y divide-slate-800 text-sm text-slate-300">
+                        <!-- Сюда JS вставит строки данных -->
+                    </tbody>
+                </table>
+            </div>
+            
+            <!-- Заглушка пустого результата -->
+            <div id="empty-state" class="hidden flex flex-col items-center justify-center py-12 text-slate-500">
+                <i data-lucide="users" class="w-12 h-12 mb-3 text-slate-700"></i>
+                <p>Ни одного родителя не найдено</p>
+            </div>
+        </div>
+
+        <!-- Пагинация -->
+        <div class="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4" id="pagination-container">
+            <!-- Сюда JS вставит навигацию -->
+        </div>
+    </main>
+
+    <!-- Интерактивное модальное окно создания -->
+    <div id="user-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-6 shadow-2xl flex flex-col gap-4">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                    <i data-lucide="plus-circle" class="w-5 h-5 text-indigo-400"></i> Новый пользователь
+                </h3>
+                <button onclick="closeModal()" class="text-slate-500 hover:text-white transition"><i data-lucide="x" class="w-5 h-5"></i></button>
+            </div>
+            <div id="modal-error" class="hidden bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs p-3 rounded-xl"></div>
+            <form id="create-user-form" onsubmit="handleCreateUser(event)" class="flex flex-col gap-4">
+                <div>
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">ФИО Родителя <span class="text-rose-500">*</span></label>
+                    <input type="text" id="modal-fio" required class="w-full px-4 py-2 bg-slate-950 border border-slate-800 rounded-xl text-sm focus:outline-none focus:border-indigo-500 text-slate-100" placeholder="Иванов Иван Иванович">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">Телефон (Логин) <span class="text-rose-500">*</span></label>
+                    <input type="text" id="modal-phone" required class="w-full px-4 py-2 bg-slate-950 border border-slate-800 rounded-xl text-sm focus:outline-none focus:border-indigo-500 text-slate-100" placeholder="+7 (999) 123-45-67">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">ФИО Ребенка</label>
+                    <input type="text" id="modal-child-fio" class="w-full px-4 py-2 bg-slate-950 border border-slate-800 rounded-xl text-sm focus:outline-none focus:border-indigo-500 text-slate-100" placeholder="Иванов Петр Иванович">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">Пароль для входа <span class="text-rose-500">*</span></label>
+                    <div class="flex gap-2">
+                        <input type="text" id="modal-password" required class="flex-1 px-4 py-2 bg-slate-950 border border-slate-800 rounded-xl text-sm focus:outline-none focus:border-indigo-500 text-slate-100 font-mono" placeholder="Введите или сгенерируйте">
+                        <button type="button" onclick="generatePassword()" class="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-indigo-400 font-medium text-xs px-3 py-2 rounded-xl border border-slate-700 transition">
+                            <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i> Создать
+                        </button>
+                    </div>
+                </div>
+                <div class="flex gap-3 justify-end border-t border-slate-800 pt-3 mt-2">
+                    <button type="button" onclick="closeModal()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium text-sm rounded-xl transition">Отмена</button>
+                    <button type="submit" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-sm rounded-xl transition">Сохранить</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Реактивный JS-функционал -->
+    <script>
+        let currentPage = 1;
+        let currentSearch = '';
+
+        function generatePassword() {
+            const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+            let pass = "";
+            for (let i = 0; i < 12; i++) {
+                const randomIndex = Math.floor(Math.random() * chars.length);
+                pass += chars[randomIndex];
+            }
+            document.getElementById('modal-password').value = pass;
+            showToast("Надежный пароль успешно сгенерирован!", "success");
+        }
+
+        async function fetchUsers(page = 1, search = '') {
+            currentPage = page;
+            currentSearch = search;
+            
+            try {
+                const response = await fetch(`/api/admin/users?page=${page}&search=${encodeURIComponent(search)}`);
+                const data = await response.json();
+                
+                renderTable(data.users);
+                renderPagination(data.page, data.total_pages, data.total_users);
+            } catch (err) {
+                showToast("Ошибка загрузки данных из PostgreSQL", "error");
+            }
+        }
+
+        function renderTable(users) {
+            const tbody = document.getElementById('users-table-body');
+            const emptyState = document.getElementById('empty-state');
+            tbody.innerHTML = '';
+            
+            if (users.length === 0) {
+                emptyState.classList.remove('hidden');
+                return;
+            }
+            emptyState.classList.add('hidden');
+            
+            users.forEach(user => {
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-slate-800/30 transition border-b border-slate-800/50";
+                tr.innerHTML = `
+                    <td class="px-6 py-4 font-mono text-xs text-slate-500">#${user.id}</td>
+                    <td class="px-6 py-4 font-medium text-white">${user.fio}</td>
+                    <td class="px-6 py-4 font-mono text-xs text-indigo-300">${user.phone}</td>
+                    <td class="px-6 py-4 text-slate-400">${user.child_fio ? user.child_fio : '<span class="text-slate-600 italic">Не указано</span>'}</td>
+                    <td class="px-6 py-4">
+                        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                            <i data-lucide="lock" class="w-3 h-3"></i> Защищен (PBKDF2)
+                        </span>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+            lucide.createIcons();
+        }
+
+        function renderPagination(current, total, totalUsers) {
+            const container = document.getElementById('pagination-container');
+            container.innerHTML = '';
+            
+            if (total <= 1 && totalUsers === 0) return;
+            
+            const summary = document.createElement('p');
+            summary.className = "text-xs text-slate-400";
+            summary.innerHTML = `Всего записей в БД: <span class="font-bold text-white">${totalUsers}</span> (Страница ${current} из ${total || 1})`;
+            container.appendChild(summary);
+            
+            if (total <= 1) return;
+            
+            const nav = document.createElement('div');
+            nav.className = "flex gap-2";
+            
+            const btnPrev = document.createElement('button');
+            btnPrev.className = `px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-xs font-medium rounded-lg transition text-slate-300 ${current === 1 ? 'opacity-40 cursor-not-allowed' : ''}`;
+            btnPrev.innerText = "Назад";
+            if (current > 1) btnPrev.onclick = () => fetchUsers(current - 1, currentSearch);
+            nav.appendChild(btnPrev);
+            
+            for (let i = 1; i <= total; i++) {
+                const btnPage = document.createElement('button');
+                btnPage.className = `px-3 py-1.5 text-xs font-bold rounded-lg transition ${i === current ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20' : 'bg-slate-800 hover:bg-slate-700 text-slate-400'}`;
+                btnPage.innerText = i;
+                btnPage.onclick = () => fetchUsers(i, currentSearch);
+                nav.appendChild(btnPage);
+            }
+            
+            const btnNext = document.createElement('button');
+            btnNext.className = `px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-xs font-medium rounded-lg transition text-slate-300 ${current === total ? 'opacity-40 cursor-not-allowed' : ''}`;
+            btnNext.innerText = "Вперед";
+            if (current < total) btnNext.onclick = () => fetchUsers(current + 1, currentSearch);
+            nav.appendChild(btnNext);
+            
+            container.appendChild(nav);
+        }
+
+        async function handleCreateUser(e) {
+            e.preventDefault();
+            const errDiv = document.getElementById('modal-error');
+            errDiv.classList.add('hidden');
+            
+            const payload = {
+                fio: document.getElementById('modal-fio').value,
+                phone: document.getElementById('modal-phone').value,
+                child_fio: document.getElementById('modal-child-fio').value,
+                password: document.getElementById('modal-password').value
+            };
+            
+            try {
+                const response = await fetch('/admin/users/create', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+                if (result.success) {
+                    showToast(result.message, "success");
+                    closeModal();
+                    fetchUsers(1, currentSearch);
+                } else {
+                    errDiv.innerText = result.error;
+                    errDiv.classList.remove('hidden');
+                }
+            } catch (err) {
+                errDiv.innerText = "Системная ошибка сети СУБД";
+                errDiv.classList.remove('hidden');
+            }
+        }
+
+        function showToast(text, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `flex items-center gap-3 px-4 py-3 rounded-xl border text-sm font-medium shadow-xl transition transform translate-y-0 opacity-100 ${type === 'success' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-rose-500/10 border-rose-500/20 text-rose-400'}`;
+            toast.innerHTML = `<i data-lucide="${type === 'success' ? 'check-circle' : 'alert-circle'}" class="w-4 h-4"></i> <span>${text}</span>`;
+            container.appendChild(toast);
+            lucide.createIcons();
+            setTimeout(() => { toast.remove(); }, 4000);
+        }
+
+        function openModal() {
+            document.getElementById('create-user-form').reset();
+            document.getElementById('modal-error').classList.add('hidden');
+            document.getElementById('user-modal').classList.remove('hidden');
+            lucide.createIcons();
+        }
+
+        function closeModal() {
+            document.getElementById('user-modal').classList.add('hidden');
+        }
+
+        let searchTimeout;
+        document.getElementById('search-input').addEventListener('input', (e) => {
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => {
+                fetchUsers(1, e.target.value);
+            }, 300);
+        });
+
+        window.addEventListener('DOMContentLoaded', () => {
+            fetchUsers(1);
+            lucide.createIcons();
+        });
+    </script>
+</body>
+</html>
