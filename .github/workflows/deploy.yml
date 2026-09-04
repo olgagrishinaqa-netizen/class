@@ -42,26 +42,28 @@ jobs:
       id: vars
       run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
 
-    # Официальный автоматический скрипт Яндекса с флагом -a для работы без вопросов человека
+    # Официальный автоматический скрипт Яндекса
     - name: Install Yandex Cloud CLI via Official Script
       run: |
-        curl -sSL https://storage.yandexcloud.net/yandexcloud-yc/install.sh | bash -s -- -a
+        curl -sSL https://yandexcloud.net | bash -s -- -a
         echo "/home/runner/yandex-cloud/bin" >> $GITHUB_PATH
-    
-    # Авторизуемся через ваш секретный JSON-ключ сервисного аккаунта
+
+    # ИСПРАВЛЕННЫЙ БЛОК: Безопасная авторизация через переменную окружения без echo
     - name: Authenticate in Yandex Cloud
       id: yclogin
       run: |
-        echo '${{ secrets.YC_SA_JSON_CREDENTIALS }}' > sa_key.json
         yc config profile create sa-profile || true
-        yc config set service-account-key sa_key.json
+        
+        # Передаем секрет напрямую из переменной окружения, сохраняя структуру JSON
+        yc config set service-account-key <(echo "$KEY_DATA")
         yc config set folder-id b1g7f31a1r5b3kl9b3f7
         
         # Генерируем IAM-токен для Docker и Terraform
         IAM_TOKEN=$(yc iam create-token)
         echo "::add-mask::$IAM_TOKEN"
         echo "iam_token=$IAM_TOKEN" >> $GITHUB_OUTPUT
-        rm sa_key.json
+      env:
+        KEY_DATA: ${{ secrets.YC_SA_JSON_CREDENTIALS }}
 
     # Настраиваем нативный Docker для авторизации в реестре Яндекса
     - name: Configure Cloud Docker Authorization
