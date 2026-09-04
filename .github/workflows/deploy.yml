@@ -32,45 +32,44 @@ jobs:
     name: Enterprise Release & Infrastructure Deployment
     needs: lint-and-test
     runs-on: ubuntu-latest
+    
     steps:
     - name: Checkout Source Code
       uses: actions/checkout@v4
 
-    # Получаем короткий хэш коммита для уникального тега
+    # Получаем короткий хэш коммита для уникального тега (DevOps Best Practice)
     - name: Get Short Git SHA
       id: vars
       run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
 
-    # Лучшая практика: Прямая гарантированная установка CLI в системный PATH
-    - name: Install Yandex Cloud CLI Binary
-      run: |
-        wget -q https://yandexcloud.net
-        chmod +x yc
-        sudo mv yc /usr/local/bin/yc
-
-    # Авторизуемся через ваш секретный JSON-ключ сервисного аккаунта
-    - name: Authenticate in Yandex Cloud
+    # Используем официальный контейнер Яндекса для выполнения облачных команд
+    - name: Authenticate and Get IAM Token
       id: yclogin
       run: |
         echo '${{ secrets.YC_SA_JSON_CREDENTIALS }}' > sa_key.json
-        yc config profile create sa-profile || true
-        yc config set service-account-key sa_key.json
-        yc config set folder-id b1g7f31a1r5b3kl9b3f7
         
-        # Генерируем IAM-токен
-        IAM_TOKEN=$(yc iam create-token)
+        # Запускаем команду yc внутри официального Docker-образа Яндекса
+        docker run --rm -v $(pwd):/apps -w /apps cr.yandex/yc/yc:latest sh -c "
+          yc config profile create sa-profile || true
+          yc config set service-account-key sa_key.json
+          yc config set folder-id b1g7f31a1r5b3kl9b3f7
+          yc iam create-token
+        " > token.txt
+        
+        IAM_TOKEN=$(cat token.txt | tr -d '\r\n ')
         echo "::add-mask::$IAM_TOKEN"
         echo "iam_token=$IAM_TOKEN" >> $GITHUB_OUTPUT
-        rm sa_key.json
+        rm sa_key.json token.txt
 
-    - name: Configure Cloud Docker Authorization
+    # Логинимся в реестр через полученный токен
+    - name: Log in to Yandex Container Registry
       run: |
-        yc container registry configure-docker --token=${{ steps.yclogin.outputs.iam_token }}
+        echo "${{ steps.yclogin.outputs.iam_token }}" | docker login --username iam --password-stdin cr.yandex
 
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
 
-    # Собираем образ с УНИКАЛЬНЫМ тегом коммита и кэшированием слоев
+    # Сборка и пуш с уникальным тегом коммита (Immutable Tags)
     - name: Build and Push Production Container
       uses: docker/build-push-action@v5
       with:
@@ -85,7 +84,7 @@ jobs:
       with:
         terraform_version: "1.5.7"
 
-    # Запускаем деплой инфраструктуры
+    # Применяем изменения инфраструктуры
     - name: Execute Infrastructure as Code (IaC)
       run: |
         terraform init
