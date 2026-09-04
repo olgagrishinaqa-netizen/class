@@ -24,6 +24,12 @@ variable "db_password" {
   sensitive = true
 }
 
+variable "network_id" {
+  type        = string
+  description = "ID VPC-сети, в которой расположена PostgreSQL"
+  default     = "" # Укажите ID вашей VPC сети (например: "enp...")
+}
+
 provider "yandex" {
   token     = var.yc_token
   zone      = "ru-central1-a"
@@ -45,8 +51,16 @@ resource "yandex_container_registry" "class_registry" {
 resource "yandex_serverless_container" "class_container" {
   name               = "class-site-container-prod"
   memory             = 256
-  execution_timeout  = "15s"
+  execution_timeout  = "60s"
   service_account_id = var.service_account_id
+
+  # Привязка контейнера к VPC для взаимодействия с PostgreSQL и DNS
+  dynamic "connectivity" {
+    for_each = var.network_id != "" ? [var.network_id] : []
+    content {
+      network_id = connectivity.value
+    }
+  }
 
   image {
     url = "cr.yandex/${yandex_container_registry.class_registry.id}/class-site:${var.image_tag}"
