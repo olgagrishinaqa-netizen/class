@@ -33,23 +33,29 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v3
 
-    # Авторизация через JSON-ключ сервисного аккаунта
-    - name: Yandex Cloud Auth
-      uses: yc-actions/yc-ycctl-Setup@v1
-      with:
-        yc-sa-json-credentials: ${{ secrets.YC_SA_JSON_CREDENTIALS }}
-
-    # Генерируем временный IAM-токен для Docker и Terraform из JSON-ключа
-    - name: Get IAM Token
-      id: token
+    # Стабильная установка утилиты yc напрямую в систему Linux гитхаба
+    - name: Install Yandex Cloud CLI
       run: |
+        curl -sSL https://yandexcloud.net | bash -s -- -i /usr/local/bin -n
+
+    # Авторизуемся через ваш секретный JSON-ключ сервисного аккаунта
+    - name: Authenticate in Yandex Cloud
+      id: yclogin
+      run: |
+        echo '${{ secrets.YC_SA_JSON_CREDENTIALS }}' > sa_key.json
+        yc config profile create sa-profile || true
+        yc config set service-account-key sa_key.json
+        yc config set folder-id b1g7f31a1r5b3kl9b3f7
+        
+        # Генерируем IAM-токен для Docker и Terraform
         IAM_TOKEN=$(yc iam create-token)
         echo "::add-mask::$IAM_TOKEN"
         echo "iam_token=$IAM_TOKEN" >> $GITHUB_OUTPUT
+        rm sa_key.json
 
     - name: Configure Docker for Yandex Registry
       run: |
-        yc container registry configure-docker --token=${{ steps.token.outputs.iam_token }}
+        yc container registry configure-docker --token=${{ Administrative_token.outputs.iam_token || steps.yclogin.outputs.iam_token }}
 
     - name: Build and Push Docker Image
       run: |
@@ -62,6 +68,6 @@ jobs:
     - name: Terraform Init and Apply
       run: |
         terraform init
-        terraform apply -var="yc_token=${{ steps.token.outputs.iam_token }}" -replace="yandex_serverless_container.class_container" -auto-approve
+        terraform apply -var="yc_token=${{ steps.yclogin.outputs.iam_token }}" -replace="yandex_serverless_container.class_container" -auto-approve
       env:
-        YC_TOKEN: ${{ steps.token.outputs.iam_token }}
+        YC_TOKEN: ${{ steps.yclogin.outputs.iam_token }}
