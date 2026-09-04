@@ -53,9 +53,10 @@ jobs:
         echo "iam_token=$IAM_TOKEN" >> $GITHUB_OUTPUT
         rm sa_key.json
 
+    # Исправленный шаг конфигурации Docker
     - name: Configure Docker for Yandex Registry
       run: |
-        yc container registry configure-docker --token=${{ Administrative_token.outputs.iam_token || steps.yclogin.outputs.iam_token }}
+        yc container registry configure-docker --token=${{ steps.yclogin.outputs.iam_token }}
 
     - name: Build and Push Docker Image
       run: |
