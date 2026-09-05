@@ -77,11 +77,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          YC_VERSION="0.134.0"
-          curl -sSL "https://yandexcloud.net{YC_VERSION}/linux/amd64/yc" -o /tmp/yc
-          chmod +x /tmp/yc
+          curl -sSL "https://storage.yandexcloud.net/yandexcloud-yc/release/yc_linux_amd64.tar.gz" -o /tmp/yc.tar.gz
+          tar -xzf /tmp/yc.tar.gz -C /tmp
           mkdir -p /home/runner/yandex-cloud/bin
           mv /tmp/yc /home/runner/yandex-cloud/bin/yc
+          chmod +x /home/runner/yandex-cloud/bin/yc
+          /home/runner/yandex-cloud/bin/yc --version
 
       - name: Authenticate in Yandex Cloud
         id: ycloud
