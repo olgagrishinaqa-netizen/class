@@ -1,23 +1,24 @@
 # Дипломный проект: Сайт класса для родителей с автоматизацией CI/CD
 import os
 import math
-import psycopg2
+# Использование psycopg2-binary в контейнерах:
+import psycopg2-binary as psycopg2 
 from psycopg2.extras import DictCursor
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
+# Ключ обязательно должен передаваться извне в проде!
 app.secret_key = os.environ.get("SECRET_KEY", "fallback-dev-secret-key")
 
 def get_db_connection():
-    conn = psycopg2.connect(
+    return psycopg2.connect(
         host=os.environ.get("DB_HOST"),
         database=os.environ.get("DB_NAME", "class_db"),
         user=os.environ.get("DB_USER", "db_admin"),
         password=os.environ.get("DB_PASSWORD"),
         sslmode="require"
     )
-    return conn
 
 def init_db():
     try:
@@ -46,7 +47,6 @@ def init_db():
     except Exception as e:
         print(f"Database initialization warning: {e}")
 
-# Инициализируем БД только если это не тестовый прогон pytest
 if not app.config.get('TESTING'):
     init_db()
 

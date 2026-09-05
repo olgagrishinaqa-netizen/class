@@ -4,6 +4,19 @@ terraform {
       source = "yandex-cloud/yandex"
     }
   }
+
+  # Хранение стейта в Yandex Object Storage
+  backend "s3" {
+    endpoint = "https://yandexcloud.net"
+    bucket   = "class-site-tfstate"         # Имя вашего бакета в Yandex Cloud
+    region   = "ru-central1"
+    key      = "production/terraform.tfstate"
+
+    skip_region_validation      = true
+    skip_credentials_validation = true
+    skip_requesting_account_id  = true # Важно для совместимости с Yandex Cloud S3
+    skip_s3_express_support     = true
+  }
 }
 
 variable "yc_token" {
@@ -23,6 +36,12 @@ variable "service_account_id" {
 variable "db_password" {
   type      = string
   sensitive = true
+}
+
+variable "flask_secret_key" {
+  type      = string
+  sensitive = true
+  default   = "super-secret-prod-key-12345"
 }
 
 variable "network_id" {
@@ -61,7 +80,6 @@ resource "yandex_serverless_container" "class_container" {
   execution_timeout  = "60s"
   service_account_id = var.service_account_id
 
-  # Профессиональная привязка к сети VPC и подсети для доступа к БД
   dynamic "connectivity" {
     for_each = var.network_id != "" ? [1] : []
     content {
@@ -77,6 +95,7 @@ resource "yandex_serverless_container" "class_container" {
       "DB_NAME"     = "class_db"
       "DB_USER"     = "db_admin"
       "DB_PASSWORD" = var.db_password
+      "SECRET_KEY"  = var.flask_secret_key
     }
   }
 
