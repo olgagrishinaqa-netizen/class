@@ -47,7 +47,6 @@ jobs:
           flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
 
       - name: Run Python tests
-        # Добавлена заглушка, чтобы тесты не ломились в реальную БД
         env:
           TESTING: "true"
         run: |
@@ -112,6 +111,9 @@ jobs:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
 
       - name: Terraform Init
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         run: |
           terraform init -input=false
 
@@ -120,6 +122,8 @@ jobs:
           TF_VAR_yc_token: ${{ steps.ycloud.outputs.iam_token }}
           TF_VAR_service_account_id: ${{ env.YC_SERVICE_ACCOUNT_ID }}
           TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         run: |
           terraform apply -target=yandex_container_registry.class_registry -input=false -auto-approve
 
@@ -156,6 +160,8 @@ jobs:
           TF_VAR_image_tag: ${{ steps.vars.outputs.sha_short }}
           TF_VAR_service_account_id: ${{ env.YC_SERVICE_ACCOUNT_ID }}
           TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         run: |
           terraform apply -input=false -auto-approve
 
@@ -176,8 +182,7 @@ jobs:
       - name: Send Telegram Notification
         uses: appleboy/telegram-action@master
         continue-on-error: true
-        # ИСПРАВЛЕНО: Прямая и безопасная проверка секретов контекста GitHub Actions
-        if: always() && ${{ secrets.TELEGRAM_TOKEN != '' && secrets.TELEGRAM_TO != '' }}
+        if: always() && env.TG_TOKEN != '' && env.TG_TO != ''
         env:
           TG_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TG_TO: ${{ secrets.TELEGRAM_TO }}
