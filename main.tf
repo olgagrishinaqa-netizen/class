@@ -5,17 +5,15 @@ terraform {
     }
   }
 
-  # Хранение стейта в Yandex Object Storage
+  # Хранение стейта в Yandex Object Storage (совместимо с Terraform 1.5.7)
   backend "s3" {
     endpoint = "https://yandexcloud.net"
-    bucket   = "class-site-tfstate"         # Имя вашего бакета в Yandex Cloud
+    bucket   = "class-site-tfstate"
     region   = "ru-central1"
     key      = "production/terraform.tfstate"
 
     skip_region_validation      = true
     skip_credentials_validation = true
-    skip_requesting_account_id  = true # Важно для совместимости с Yandex Cloud S3
-    skip_s3_express_support     = true
   }
 }
 
