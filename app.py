@@ -2,7 +2,7 @@
 import os
 import math
 # Использование psycopg2-binary в контейнерах:
-import psycopg2-binary as psycopg2 
+import psycopg2
 from psycopg2.extras import DictCursor
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
