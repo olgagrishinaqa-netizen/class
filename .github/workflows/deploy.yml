@@ -177,7 +177,7 @@ jobs:
         uses: appleboy/telegram-action@master
         continue-on-error: true
         # ИСПРАВЛЕНО: Прямая и безопасная проверка секретов контекста GitHub Actions
-        if: always() && secrets.TELEGRAM_TOKEN != '' && secrets.TELEGRAM_TO != ''
+        if: always() && ${{ secrets.TELEGRAM_TOKEN != '' && secrets.TELEGRAM_TO != '' }}
         env:
           TG_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TG_TO: ${{ secrets.TELEGRAM_TO }}
