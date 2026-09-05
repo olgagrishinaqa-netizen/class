@@ -5,17 +5,15 @@ terraform {
     }
   }
 
-  # Хранение стейта в Yandex Object Storage (Путевой стиль адресации)
+  # Хранение стейта в Yandex Object Storage (Совместимо с Terraform 1.5.7)
   backend "s3" {
-    endpoint = "https://storage.yandexcloud.net"
+    endpoint = "https://yandexcloud.net"
     bucket   = "class-site-tfstate"
     region   = "ru-central1"
     key      = "production/terraform.tfstate"
 
     skip_region_validation      = true
     skip_credentials_validation = true
-    # Обход генерации виртуальных хостов для старых версий Terraform
-    skip_s3_checksum            = true 
   }
 }
 
@@ -80,8 +78,9 @@ resource "yandex_serverless_container" "class_container" {
   execution_timeout  = "60s"
   service_account_id = var.service_account_id
 
+  # Исправлено: валидное условие для активации сетевой связности
   dynamic "connectivity" {
-    for_each = var.network_id != "" ? : []
+    for_each = var.network_id != "" ? [1] : []
     content {
       network_id = var.network_id
     }
